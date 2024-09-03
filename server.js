@@ -1,26 +1,36 @@
+// In your Express app (server.js or routes file)
 const express = require('express');
-const dotenv = require('dotenv');
-const morgan = require('morgan');
-const cors = require('cors');
-const connectDB = require('./config/db');
+const User = require('./models/User'); // Assuming you have a User model
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
-dotenv.config();
-connectDB();
+const router = express.Router();
 
-const app = express();
+// Registration endpoint
+router.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({ username, password: hashedPassword });
 
-// Middleware
-app.use(express.json());
-app.use(cors());
-app.use(morgan('dev'));
-
-// Basic route
-app.get('/', (req, res) => {
-    res.send('API is running...');
+    try {
+        await newUser.save();
+        res.status(201).send('User registered');
+    } catch (error) {
+        res.status(400).send('Error registering user');
+    }
 });
 
-const PORT = process.env.PORT || 5000;
+// Login endpoint
+router.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+    const user = await User.findOne({ username });
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    if (user && (await bcrypt.compare(password, user.password))) {
+        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        res.json({ token });
+    } else {
+        res.status(401).send('Invalid credentials');
+    }
 });
+
+module.exports = router;
